@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cau-eclass-mcp"
+version = "0.1.0"
+description = "MCP server for CAU e-class integration with Claude Code"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "CAU e-class MCP Contributors"}
+]
+keywords = ["mcp", "cau", "eclass", "claude", "model-context-protocol"]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "requests>=2.31.0",
+    "httpx[http2]>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "cryptography>=42.0.0",
+    "keyring>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/won33/cau-eclass-mcp"
+Repository = "https://github.com/won33/cau-eclass-mcp"
+
+[project.scripts]
+cau-eclass-mcp = "cau_eclass_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
