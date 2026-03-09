@@ -1,85 +1,112 @@
-# CAU e-class MCP
+# 🎓 CAU e-class MCP
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-MCP (Model Context Protocol) server for integrating CAU e-class platform with Claude Code. Access your courses, announcements, assignments, and lecture modules directly through Claude.
+**브라우저 없이 Claude에서 바로 중앙대 e-class를 확인하세요!**
 
-> **Note**: This is an unofficial tool created by students for students. Use at your own risk.
+공지사항, 과제, 강의자료를 Claude와 대화하면서 확인할 수 있는 MCP 서버입니다.
 
-## Features
+> ⚠️ 학생이 만든 **비공식** 도구입니다. 중앙대학교와 무관하며, 사용에 따른 책임은 본인에게 있습니다.
 
-- **Dashboard Access**: View all active courses with metadata (names, IDs, terms)
-- **Announcements**: Read course announcements without opening a browser
-- **Assignments**: Check assignments and submission status with due dates
-- **Lecture Modules**: View weekly lecture modules with attendance tracking
-- **Dual Transport**: stdio mode (for Claude Code) + SSE mode (web UI)
-- **Web UI**: Browser-based credential setup and server monitoring
-- **Cross-Platform**: Works on Windows, macOS, and Linux
-- **Secure Credentials**: Uses OS keyring for secure credential storage
+---
 
-## Quick Start
+## ✨ 이런 걸 할 수 있어요
 
-### Prerequisites
+| 기능 | 설명 |
+|---|---|
+| 📋 **대시보드** | 수강 중인 전체 과목 한눈에 보기 |
+| 📢 **공지사항** | 과목별 공지사항 읽기 |
+| 📝 **과제** | 과제 목록 + 마감일 + 제출 상태 확인 |
+| 🎬 **강의자료** | 주차별 강의 모듈 + 출석 현황 |
+| 🌐 **Web UI** | 브라우저에서 인증 설정 + 서버 모니터링 |
 
-- Python 3.10 or higher
-- CAU student account with e-class access
-- [Claude Code](https://claude.com/code) installed
+---
 
-### Installation
+## 🚀 시작하기
 
-Install directly from GitHub:
+### 필요한 것
+
+- **Python 3.10** 이상
+- **중앙대 포탈 계정** (학번 + 비밀번호)
+- **Claude Code** ([설치 링크](https://claude.com/code))
+
+### Step 1: 설치
+
+**방법 A) GitHub에서 바로 설치** (가장 간단)
 
 ```bash
 pip install git+https://github.com/legendwon/cau-eclass-mcp.git
 ```
 
-Or clone and install for development:
+**방법 B) 직접 클론해서 설치** (개발용)
 
 ```bash
 git clone https://github.com/legendwon/cau-eclass-mcp.git
 cd cau-eclass-mcp
-pip install -e .[dev]
+pip install -e .
 ```
 
-### Configuration
+> 💡 **venv를 쓰고 있다면?** 반드시 해당 venv의 pip으로 설치하세요:
+> ```bash
+> # Windows
+> .\venv\Scripts\pip.exe install -e .
+> 
+> # macOS/Linux
+> ./venv/bin/pip install -e .
+> ```
 
-#### Option 1: System Keyring (Recommended)
+### Step 2: 인증 설정
 
-Run the setup command to save credentials to your OS keyring:
+최초 1회만 하면 됩니다. 3가지 방법 중 편한 걸 골라주세요:
+
+#### 🔐 방법 1: OS 키링에 저장 (추천)
+
+가장 안전합니다. 비밀번호가 운영체제의 보안 저장소에 암호화되어 저장돼요.
 
 ```bash
 python -c "from cau_eclass_mcp.utils.credentials import CredentialManager; m = CredentialManager(); m.prompt_for_credentials()"
 ```
 
-This stores credentials securely in:
-- Windows: Credential Manager
-- macOS: Keychain
-- Linux: Secret Service (GNOME Keyring, KWallet, etc.)
+학번과 비밀번호를 입력하면 끝!
 
-#### Option 2: Environment Variables
+- Windows → 자격 증명 관리자
+- macOS → 키체인
+- Linux → GNOME Keyring / KWallet
 
-Set environment variables (useful for CI/CD or temporary usage):
+#### 🌐 방법 2: Web UI에서 설정
+
+터미널이 불편하다면 웹 브라우저에서도 설정할 수 있어요:
 
 ```bash
-# Linux/macOS
-export CAU_USERNAME="your_student_id"
-export CAU_PASSWORD="your_password"
-
-# Windows (PowerShell)
-$env:CAU_USERNAME="your_student_id"
-$env:CAU_PASSWORD="your_password"
+python -m cau_eclass_mcp --sse
 ```
 
-#### Option 3: Interactive Prompt
+브라우저에서 http://localhost:8000 을 열고, 학번/비밀번호를 입력하면 됩니다.
 
-If no credentials are found, the MCP server will prompt you interactively on first run.
+#### ⚡ 방법 3: 환경변수
 
-### Claude Code Setup
+임시로 쓰거나 CI/CD에서 유용합니다:
 
-Add the MCP server to your Claude Code configuration:
+```bash
+# Windows (PowerShell)
+$env:CAU_USERNAME="학번"
+$env:CAU_PASSWORD="비밀번호"
 
-**For global access**, edit `~/.claude/claude.json` (or `C:\Users\YourName\.claude\claude.json` on Windows):
+# macOS/Linux
+export CAU_USERNAME="학번"
+export CAU_PASSWORD="비밀번호"
+```
+
+#### 🤷 방법 4: 그냥 실행하기
+
+아무 설정 안 해도 첫 실행 시 자동으로 물어봅니다!
+
+### Step 3: Claude Code에 연결
+
+Claude Code가 이 MCP 서버를 인식하도록 설정 파일을 추가해주세요.
+
+**모든 프로젝트에서 쓰고 싶다면** → `~/.claude/claude.json` 편집:
 
 ```json
 {
@@ -92,277 +119,200 @@ Add the MCP server to your Claude Code configuration:
 }
 ```
 
-**For project-specific access**, create `.mcp.json` in your project root:
+> Windows 경로: `C:\Users\사용자이름\.claude\claude.json`
+
+**특정 프로젝트에서만 쓰고 싶다면** → 프로젝트 루트에 `.mcp.json` 생성:
 
 ```json
 {
-  "cau-eclass": {
-    "command": "python",
-    "args": ["-m", "cau_eclass_mcp"]
+  "mcpServers": {
+    "cau-eclass": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "cau_eclass_mcp"]
+    }
   }
 }
 ```
 
-Restart Claude Code after configuration.
+> 💡 **venv를 쓰고 있다면?** `"command"`를 venv의 python 경로로 바꿔주세요:
+> ```json
+> {
+>   "mcpServers": {
+>     "cau-eclass": {
+>       "type": "stdio",
+>       "command": "D:\\경로\\cau-eclass-mcp\\venv\\Scripts\\python.exe",
+>       "args": ["-m", "cau_eclass_mcp"],
+>       "cwd": "D:\\경로\\cau-eclass-mcp",
+>       "env": {
+>         "PYTHONPATH": "D:\\경로\\cau-eclass-mcp\\src"
+>       }
+>     }
+>   }
+> }
+> ```
 
-## SSE Server Mode (Web UI)
+설정 후 **Claude Code를 재시작**하면 끝!
 
-For users who prefer a graphical interface or want to set up credentials without command line tools, you can run the server in SSE (Server-Sent Events) mode with a web UI.
+---
 
-### Starting the SSE Server
+## 💬 사용법
+
+Claude Code에서 자연스럽게 말하면 됩니다:
+
+```
+나: "e-class 대시보드 보여줘"
+Claude: [수강 중인 8개 과목 목록 표시]
+
+나: "암호와-인증 과목 공지사항 확인해줘"
+Claude: [최근 공지사항 표시]
+
+나: "이번 주 과제 뭐 있어?"
+Claude: [마감일과 제출 상태를 포함한 과제 목록]
+
+나: "공공기관NCS분석 강의자료 보여줘"
+Claude: [주차별 강의 모듈 + 출석 현황]
+```
+
+---
+
+## 🌐 Web UI 모드 (SSE)
+
+터미널 대신 브라우저에서 쓰고 싶다면 SSE 모드로 실행하세요:
 
 ```bash
-# Default: runs on http://127.0.0.1:8000
+# 기본 실행 (http://localhost:8000)
 python -m cau_eclass_mcp --sse
 
-# Custom port
+# 포트 변경
 python -m cau_eclass_mcp --sse --port 9000
-
-# Allow external connections (not recommended for security)
-python -m cau_eclass_mcp --sse --host 0.0.0.0 --port 8000
 ```
 
-### Web UI Features
+브라우저에서 http://localhost:8000 을 열면:
 
-Once the server is running, open http://localhost:8000 in your browser to access:
+- **인증 설정** — 학번/비밀번호 등록, 확인, 삭제
+- **서버 상태** — 실시간 모니터링, 인증 상태, 가동 시간
+- **API 문서** — http://localhost:8000/docs 에서 Swagger UI 확인
 
-1. **Credential Setup**
-   - Save CAU credentials to OS keyring via web form
-   - Check credential configuration status
-   - Delete stored credentials
+종료하려면 터미널에서 `Ctrl+C`
 
-2. **Server Status Dashboard**
-   - Real-time server status monitoring
-   - Authentication status
-   - Server uptime tracking
-   - Automatic status updates every 5 seconds
+---
 
-3. **API Documentation**
-   - Interactive Swagger UI at http://localhost:8000/docs
-   - Test API endpoints directly in browser
+## 🔧 MCP 도구 목록
 
-### Available Endpoints
+Claude Code에서 자동으로 사용되는 도구들입니다:
 
-When running in SSE mode:
+| 도구 | 설명 | 파라미터 |
+|---|---|---|
+| `get_dashboard` | 전체 수강 과목 조회 | 없음 |
+| `list_course_announcements` | 과목 공지사항 | `course_id` (필수), `limit` (선택, 기본 20) |
+| `list_assignments` | 과제 목록 + 제출 상태 | `course_id` (필수) |
+| `get_lecture_modules` | 주차별 강의 + 출석 | `course_id` (필수), `include_attendance` (선택) |
 
-- `http://localhost:8000/` - Web UI
-- `http://localhost:8000/api/credentials` - Credential management
-- `http://localhost:8000/api/status` - Server status
-- `http://localhost:8000/health` - Health check
-- `http://localhost:8000/docs` - API documentation
+---
 
-### Security Notes
+## 🏗️ 기술 구조
 
-- Server binds to `127.0.0.1` (localhost) by default
-- No network exposure unless `--host 0.0.0.0` is used
-- Credentials are stored in OS keyring, never exposed via API
-- CORS restricted to localhost origins only
+### CAU-ON 플랫폼
 
-### Stopping the Server
+중앙대는 **CAU-ON**이라는 자체 LMS를 사용합니다 (Canvas 기반이지만 커스텀). 이 MCP 서버는:
 
-Press `Ctrl+C` in the terminal where the server is running.
+1. CAU SSO 포탈에서 RSA 암호화로 로그인
+2. API가 활성화된 세션 쿠키 획득
+3. Canvas 스타일 REST API (`/api/v1/...`)로 데이터 조회
 
-## Usage with Claude Code
-
-Once configured, you can ask Claude to access your e-class data:
+### 인증 흐름
 
 ```
-You: "Show my e-class dashboard"
-Claude: [Lists your 8 courses with IDs and terms]
-
-You: "List announcements for 암호와-인증 course"
-Claude: [Shows recent announcements with dates and content]
-
-You: "What assignments are due this week?"
-Claude: [Lists assignments with due dates and submission status]
-
-You: "Show lecture modules for 공공기관NCS분석"
-Claude: [Displays weekly modules with attendance status]
+학번/비밀번호 입력 → SSO 로그인 → RSA 비밀번호 암호화 → Canvas 세션
+                → API 활성 쿠키 획득 → CAU-ON API 요청
 ```
 
-## Architecture
+- 서버가 제공하는 RSA 개인키로 클라이언트 측 암호화 (특이한 구조!)
+- PKCS1v15 패딩
+- HTTP/2 필수
+- `Referer` 헤더가 세션 업그레이드에 필수
+- 세션 쿠키: 208자 (기본) → 421자 (API 활성)
 
-### CAU-ON Platform
+---
 
-CAU uses a proprietary LMS platform called **CAU-ON** (not standard Canvas/Moodle). This MCP server:
-
-1. Authenticates via CAU SSO portal using RSA-encrypted password
-2. Obtains API-enabled session cookies
-3. Interacts with Canvas-like REST APIs (`/api/v1/...`)
-
-### Authentication Flow
-
-```
-User Input → SSO Login → RSA Password Encryption → Canvas Session
-         → API-Enabled Cookie → CAU-ON API Requests
-```
-
-**Key technical details**:
-- Client-side RSA decryption (server provides private key!)
-- PKCS1v15 padding for password encryption
-- HTTP/2 protocol support required
-- Critical `Referer` header for session upgrade
-- Session cookies: 208 chars (basic) → 421 chars (API-enabled)
-
-## MCP Tools
-
-### 1. `mcp__cau-eclass__get_dashboard`
-
-Get overview of all active courses.
-
-**Parameters**: None
-
-**Returns**: List of courses with IDs, names, terms, and enrollment status
-
-### 2. `mcp__cau-eclass__list_course_announcements`
-
-List announcements for a specific course.
-
-**Parameters**:
-- `course_id` (string, required): Course ID from dashboard
-- `limit` (integer, optional): Max announcements to return (default: 20)
-
-**Returns**: Announcements with titles, dates, authors, and content
-
-### 3. `mcp__cau-eclass__list_assignments`
-
-List assignments with submission status.
-
-**Parameters**:
-- `course_id` (string, required): Course ID
-
-**Returns**: Assignments with due dates, submission status, and scores
-
-### 4. `mcp__cau-eclass__get_lecture_modules`
-
-View weekly lecture modules with attendance tracking.
-
-**Parameters**:
-- `course_id` (string, required): Course ID
-- `include_attendance` (boolean, optional): Include detailed attendance (slower, default: false)
-
-**Returns**: Weekly modules with completion status and lecture items
-
-## Usage Modes
-
-### stdio Mode (Default)
-
-For Claude Code integration:
-
-```bash
-python -m cau_eclass_mcp
-```
-
-This runs the server in stdio mode, communicating via standard input/output. Credentials must be configured via command line or environment variables before use.
-
-### SSE Mode (Web UI)
-
-For graphical credential setup and monitoring:
-
-```bash
-python -m cau_eclass_mcp --sse
-```
-
-Open http://localhost:8000 in your browser to configure credentials and monitor server status.
-
-## Troubleshooting
+## ❓ 문제 해결
 
 ### "Failed to authenticate with CAU SSO"
 
-- Verify your student ID and password are correct
-- **Web UI method**: Navigate to http://localhost:8000 (if using SSE mode) and update credentials
-- **Command line method**: Delete and re-enter credentials:
+- 학번/비밀번호가 맞는지 확인
+- Web UI에서 다시 설정: http://localhost:8000 (SSE 모드)
+- 또는 기존 인증 정보 삭제 후 재등록:
   ```bash
   python -c "from cau_eclass_mcp.utils.credentials import CredentialManager; m = CredentialManager(); m.delete_credentials()"
   ```
 
 ### "Keyring not available"
 
-If keyring fails, use environment variables instead:
+키링이 안 되면 환경변수를 사용하세요:
 ```bash
-export CAU_USERNAME="your_id"
-export CAU_PASSWORD="your_password"
+$env:CAU_USERNAME="학번"
+$env:CAU_PASSWORD="비밀번호"
 ```
 
-### MCP server not responding
+### MCP 서버가 응답하지 않을 때
 
-1. Test the server manually:
+1. 직접 실행해서 에러 확인:
    ```bash
-   # stdio mode
-   python -m cau_eclass_mcp
-
-   # SSE mode (should show startup message)
-   python -m cau_eclass_mcp --sse
+   python -m cau_eclass_mcp          # stdio 모드
+   python -m cau_eclass_mcp --sse    # SSE 모드
    ```
-2. Check Claude Code logs for errors
-3. Verify `.mcp.json` or `claude.json` configuration
+2. Claude Code 로그 확인
+3. `.mcp.json` 또는 `claude.json` 설정 확인
 
-### Web UI not loading
+### 세션 만료 에러
 
-If running `--sse` mode but web UI doesn't load:
+세션은 1시간 동안 캐시됩니다. 에러가 나면 Claude Code를 재시작하세요.
 
-1. Check if the server started successfully (should show "Server starting on...")
-2. Verify the port is not in use: `netstat -an | findstr :8000` (Windows) or `lsof -i :8000` (macOS/Linux)
-3. Try a different port: `python -m cau_eclass_mcp --sse --port 9000`
-4. Check browser console for errors
+---
 
-### Session expired errors
+## 🛠️ 개발 참여
 
-Sessions are cached for 1 hour. If you see session errors, restart Claude Code to trigger re-authentication.
-
-## Development
-
-### Running Tests
+### 테스트 실행
 
 ```bash
 pip install -e .[dev]
 pytest tests/ -v
 ```
 
-### Code Formatting
+### 코드 포맷팅
 
 ```bash
 black src/ tests/
 ruff check src/ tests/
 ```
 
-## Contributing
+### 기여하기
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Security
-
-This tool stores credentials securely using OS keyring. However:
-
-- Never commit credentials to version control
-- Use strong CAU portal passwords
-- Report security issues via GitHub Issues (privately if needed)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
-- Powered by [Claude Code](https://claude.com/code)
-- Developed through 13 hours of debugging CAU-ON's proprietary API
-
-## Disclaimer
-
-This is an **unofficial** tool created by students. It is not affiliated with, endorsed by, or supported by Chung-Ang University. Use at your own risk.
-
-The tool accesses e-class data through the same APIs used by the official web interface, but:
-- CAU may change their APIs without notice (breaking this tool)
-- Excessive API usage may trigger rate limiting
-- Always comply with CAU's acceptable use policies
+1. 이 repository를 Fork
+2. 기능 브랜치 생성 (`git checkout -b feature/멋진기능`)
+3. 커밋 (`git commit -m '멋진 기능 추가'`)
+4. 푸시 (`git push origin feature/멋진기능`)
+5. Pull Request 생성
 
 ---
 
-**Questions or Issues?** Open an issue on [GitHub](https://github.com/legendwon/cau-eclass-mcp/issues)
+## 🔒 보안
+
+- 비밀번호는 OS 키링에 암호화 저장
+- 비밀번호를 절대 Git에 커밋하지 마세요
+- 보안 이슈 발견 시 [GitHub Issues](https://github.com/legendwon/cau-eclass-mcp/issues)로 알려주세요
+
+## 📄 라이선스
+
+MIT License — [LICENSE](LICENSE) 파일 참고
+
+## 🙏 감사
+
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
+- [Claude Code](https://claude.com/code)
+- 13시간의 CAU-ON API 디버깅에서 탄생 🐛
+
+---
+
+**궁금한 점이나 버그는?** → [GitHub Issues](https://github.com/legendwon/cau-eclass-mcp/issues)에 남겨주세요!
