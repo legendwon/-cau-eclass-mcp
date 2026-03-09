@@ -40,6 +40,9 @@ venv.bak/
 # Claude Code local settings
 .claude/
 
+# Private development notes (not for GitHub)
+CLAUDE/
+
 # Credentials and secrets
 .credentials.json
 credentials.json
