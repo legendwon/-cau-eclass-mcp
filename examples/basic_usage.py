@@ -39,70 +39,41 @@ def main():
     print("  ✅ Client initialized")
     print()
 
-    # Get dashboard (list of courses)
+    # 1. Dashboard
     print("Step 4: Fetching dashboard...")
-    dashboard = client.get_dashboard()
-    print(f"  ✅ Found {len(dashboard.get('courses', []))} courses")
+    courses = client.get_courses()
+    print(f"  ✅ Found {len(courses)} active courses")
     print()
 
-    # Display courses
-    print("Your Courses:")
-    print("-" * 60)
-    for course in dashboard.get('courses', []):
-        course_id = course.get('id')
-        course_name = course.get('name', 'Unknown')
-        course_code = course.get('course_code', 'N/A')
-        enrollment_term = course.get('enrollment_term_name', 'N/A')
+    # 2. Daily Briefing Data (Todo)
+    print("Step 5: Fetching Daily Briefing data (Todo items)...")
+    todo = client.get_todo_items()
+    print(f"  ✅ Found {len(todo)} upcoming items")
+    for item in todo[:3]:
+        print(f"     - [{item.get('context_name')}] {item.get('title')}")
+    print()
 
-        print(f"  [{course_id}] {course_name}")
-        print(f"      Code: {course_code}")
-        print(f"      Term: {enrollment_term}")
-        print()
-
-    # Example: Get announcements for first course
-    if dashboard.get('courses'):
-        first_course = dashboard['courses'][0]
-        course_id = first_course['id']
+    # 3. Weekly Learning View (LearningX)
+    if courses:
+        first_course = courses[0]
+        course_id = str(first_course['id'])
         course_name = first_course['name']
 
-        print(f"Announcements for: {course_name}")
-        print("-" * 60)
-
-        announcements = client.get_course_announcements(course_id, limit=5)
-
-        for i, announcement in enumerate(announcements, 1):
-            title = announcement.get('title', 'No title')
-            author = announcement.get('author', {}).get('display_name', 'Unknown')
-            posted_at = announcement.get('posted_at', 'Unknown date')
-
-            print(f"{i}. {title}")
-            print(f"   By: {author}")
-            print(f"   Posted: {posted_at}")
-            print()
-
-    # Example: Get assignments for first course
-    if dashboard.get('courses'):
-        first_course = dashboard['courses'][0]
-        course_id = first_course['id']
-        course_name = first_course['name']
-
-        print(f"Assignments for: {course_name}")
-        print("-" * 60)
-
-        assignments = client.get_assignments(course_id)
-
-        for i, assignment in enumerate(assignments, 1):
-            name = assignment.get('name', 'No name')
-            due_at = assignment.get('due_at', 'No due date')
-            submitted = assignment.get('has_submitted_submissions', False)
-
-            status = "✅ Submitted" if submitted else "⏳ Not submitted"
-
-            print(f"{i}. {name}")
-            print(f"   Due: {due_at}")
-            print(f"   Status: {status}")
-            print()
-
+        print(f"Step 6: Fetching Weekly View for: {course_name}")
+        modules = client.get_learningx_modules(course_id)
+        
+        for mod in modules[:2]:  # Show first 2 weeks
+            print(f"     Module: {mod.get('title')}")
+            for item in mod.get('module_items', [])[:2]:
+                title = item.get('title')
+                item_type = item.get('type')
+                status = ""
+                if item_type == 'lecture':
+                    att = item.get('attendance_status', {})
+                    status = "✅" if att.get('attendance_status') == 'attendance' else "❌"
+                print(f"        {status} [{item_type}] {title}")
+    
+    print()
     print("="*60)
     print("Example completed successfully!")
     print("="*60)

@@ -304,20 +304,19 @@ class CAUOnClient:
 
     def get_course_assignments(self, course_id: str) -> List[Dict]:
         """
-        Fetch course assignment submissions (student perspective)
+        Fetch course assignments along with the user's submission status.
 
         Args:
             course_id: Course ID
 
         Returns:
-            List of submission dictionaries with 'assignment_id', 'workflow_state', 'score', etc.
+            List of assignment dictionaries including a 'submission' object for the user.
 
-        Endpoint: GET /api/v1/courses/{course_id}/students/submissions
-        Note: This returns submission status, not full assignment details.
-              May need additional endpoint for assignment metadata (title, due date).
+        Endpoint: GET /api/v1/courses/{course_id}/assignments?include[]=submission
         """
-        endpoint = f'{self.base_url}/api/v1/courses/{course_id}/students/submissions'
+        endpoint = f'{self.base_url}/api/v1/courses/{course_id}/assignments'
         params = {
+            'include[]': 'submission',
             'per_page': 50
         }
 
@@ -329,8 +328,8 @@ class CAUOnClient:
 
             if isinstance(data, list):
                 return data
-            elif isinstance(data, dict) and 'submissions' in data:
-                return data['submissions']
+            elif isinstance(data, dict) and 'assignments' in data:
+                return data['assignments']
             elif isinstance(data, dict) and 'items' in data:
                 return data['items']
             else:
@@ -384,6 +383,69 @@ class CAUOnClient:
             print(f"Error fetching modules: {e}")
             raise
 
+    def get_learningx_modules(self, course_id: str) -> List[Dict]:
+        """
+        Fetch detailed course modules using LearningX API (Weekly view)
+        """
+        endpoint = f'{self.base_url}/learningx/api/v1/courses/{course_id}/modules'
+        params = {'include_detail': 'true'}
+        
+        try:
+            jwt_token = self.session.cookies.get('xn_api_token')
+            headers = {'Authorization': f'Bearer {jwt_token}'} if jwt_token else {}
+            
+            response = self._make_request('GET', endpoint, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            return self._parse_json_response(response)
+        except Exception as e:
+            print(f"Error fetching LearningX modules: {e}")
+            return []
+
+    def get_ocs_content_info(self, content_id: str) -> Optional[Dict]:
+        """
+        Fetch and parse VOD content information from OCS (Commons)
+        """
+        import xml.etree.ElementTree as ET
+        endpoint = f'https://ocs.cau.ac.kr/viewer/ssplayer/uniplayer_support/content.php'
+        params = {'content_id': content_id}
+        
+        try:
+            response = self._make_request('GET', endpoint, params=params, timeout=10)
+            response.raise_for_status()
+            
+            root = ET.fromstring(response.text)
+            info = {}
+            
+            # Extract basic info
+            playing_info = root.find('.//content_playing_info')
+            if playing_info is not None:
+                info['content_id'] = playing_info.findtext('content_id')
+                info['content_type'] = playing_info.findtext('content_type')
+                info['main_uri'] = playing_info.findtext('content_uri')
+            
+            # Extract media URLs (CDN links)
+            media_uris = []
+            for media in root.findall('.//media'):
+                media_type = media.get('type', 'default')
+                for uri in media.findall('media_uri'):
+                    media_uris.append({
+                        'type': media_type,
+                        'method': uri.get('method'),
+                        'target': uri.get('target'),
+                        'url': uri.text
+                    })
+            info['media_uris'] = media_uris
+            
+            # Extract title
+            metadata = root.find('.//content_metadata')
+            if metadata is not None:
+                info['title'] = metadata.findtext('title')
+                
+            return info
+        except Exception as e:
+            print(f"Error fetching OCS content info: {e}")
+            return None
+
     def get_attendance_item(self, course_id: str, item_id: str) -> Optional[Dict]:
         """
         Fetch attendance/lecture item details (수강 정보)
@@ -436,20 +498,41 @@ class CAUOnClient:
             print(f"Error fetching attendance item {item_id}: {e}")
             return None
 
-    def get_course_materials(self, course_id: str) -> List[Dict]:
+    def get_course_files(self, course_id: str) -> List[Dict]:
         """
-        Fetch course materials (lecture files, resources)
+        Fetch all files for a course.
 
         Args:
             course_id: Course ID
 
         Returns:
-            List of material/file dictionaries
-
-        Status: Redirects to get_modules() - use that instead
+            List of file dictionaries.
+            
+        Endpoint: GET /api/v1/courses/{course_id}/files
         """
-        # Redirect to get_modules() which provides module-based content organization
-        return self.get_modules(course_id)
+        endpoint = f'{self.base_url}/api/v1/courses/{course_id}/files'
+        params = {
+            'per_page': 100,
+            'sort': 'created_at',
+            'order': 'desc'
+        }
+
+        try:
+            response = self._make_request('GET', endpoint, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = self._parse_json_response(response)
+
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict) and 'files' in data:
+                return data['files']
+            else:
+                return []
+
+        except Exception as e:
+            print(f"Error fetching course files: {e}")
+            raise
 
     def find_course_by_name(self, course_name: str) -> Optional[str]:
         """
@@ -537,16 +620,21 @@ class CAUOnClient:
             Path(os.environ.get('TMP', '')),
         ]
 
+        # Add custom download directory if configured
+        custom_dir = os.environ.get('CAU_ECLASS_DOWNLOAD_DIR')
+        if custom_dir:
+            allowed_bases.append(Path(custom_dir))
+
         # Check if resolved path is under an allowed directory
         for base in allowed_bases:
             try:
                 if base.exists() and resolved.is_relative_to(base.resolve()):
                     return str(resolved)
-            except (ValueError, OSError):
+            except (ValueError, OSError, AttributeError):
                 continue
 
         raise ValueError(
-            f"Save path must be under ~/Downloads, ~/Documents, ~/Desktop, or temp directory. "
+            f"Save path must be under ~/Downloads, ~/Documents, ~/Desktop, temp directory, or CAU_ECLASS_DOWNLOAD_DIR. "
             f"Got: {resolved}"
         )
 
@@ -651,3 +739,37 @@ class CAUOnClient:
             print(f"Error parsing HTML for attachments: {e}")
 
         return attachments
+
+    def get_todo_items(self) -> List[Dict]:
+        """Fetch unified todo items (assignments, quizzes, lectures) across all courses"""
+        endpoint = f'{self.base_url}/api/v1/users/self/todo'
+        try:
+            response = self._make_request('GET', endpoint, timeout=10)
+            response.raise_for_status()
+            return self._parse_json_response(response)
+        except Exception as e:
+            print(f"Error fetching todo items: {e}")
+            return []
+
+    def get_conversations(self, limit: int = 10) -> List[Dict]:
+        """Fetch personal messages/conversations"""
+        endpoint = f'{self.base_url}/api/v1/conversations'
+        params = {'interacted_only': 1, 'per_page': limit}
+        try:
+            response = self._make_request('GET', endpoint, params=params, timeout=10)
+            response.raise_for_status()
+            return self._parse_json_response(response)
+        except Exception as e:
+            print(f"Error fetching conversations: {e}")
+            return []
+
+    def get_activity_stream(self) -> List[Dict]:
+        """Fetch recent activity stream across all courses"""
+        endpoint = f'{self.base_url}/api/v1/users/self/activity_stream'
+        try:
+            response = self._make_request('GET', endpoint, timeout=10)
+            response.raise_for_status()
+            return self._parse_json_response(response)
+        except Exception as e:
+            print(f"Error fetching activity stream: {e}")
+            return []

@@ -58,52 +58,19 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="list_course_announcements",
-            description="List announcements for a specific course",
+            name="get_course_details",
+            description="Get detailed course content: weekly lectures, assignments, or files",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "course_id": {
                         "type": "string",
-                        "description": "Course ID (get from dashboard first)"
+                        "description": "Course ID"
                     },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of announcements to return (default: 20)",
-                        "default": 20
-                    }
-                },
-                "required": ["course_id"]
-            }
-        ),
-        Tool(
-            name="list_assignments",
-            description="List assignments and submission status for a specific course",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "course_id": {
+                    "content_type": {
                         "type": "string",
-                        "description": "Course ID to get assignments from"
-                    }
-                },
-                "required": ["course_id"]
-            }
-        ),
-        Tool(
-            name="get_lecture_modules",
-            description="Get weekly lecture modules (주차별 강의 목록) with attendance status for online courses",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "course_id": {
-                        "type": "string",
-                        "description": "Course ID to get modules from"
-                    },
-                    "include_attendance": {
-                        "type": "boolean",
-                        "description": "Include detailed attendance/lecture status (slower, default: false)",
-                        "default": False
+                        "enum": ["weekly", "assignments", "files"],
+                        "description": "Type of content to retrieve (default: 'weekly')"
                     }
                 },
                 "required": ["course_id"]
@@ -130,6 +97,29 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["course_id", "file_id", "save_path"]
             }
+        ),
+        Tool(
+            name="get_vod_info",
+            description="Get direct streaming URLs and metadata for a VOD content ID",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content_id": {
+                        "type": "string",
+                        "description": "VOD Content ID (from module items or weekly view)"
+                    }
+                },
+                "required": ["content_id"]
+            }
+        ),
+        Tool(
+            name="get_daily_briefing",
+            description="Get a unified summary of upcoming deadlines, new messages, and recent course updates",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
         )
     ]
 
@@ -144,25 +134,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if name == "get_dashboard":
             return await handle_get_dashboard(client)
 
-        elif name == "list_course_announcements":
+        elif name == "get_course_details":
             course_id = arguments.get("course_id")
-            limit = arguments.get("limit", 20)
-            return await handle_list_announcements(client, course_id, limit)
-
-        elif name == "list_assignments":
-            course_id = arguments.get("course_id")
-            return await handle_list_assignments(client, course_id)
-
-        elif name == "get_lecture_modules":
-            course_id = arguments.get("course_id")
-            include_attendance = arguments.get("include_attendance", False)
-            return await handle_get_lecture_modules(client, course_id, include_attendance)
+            content_type = arguments.get("content_type", "weekly")
+            return await handle_get_course_details(client, course_id, content_type)
 
         elif name == "download_file":
             course_id = arguments.get("course_id")
             file_id = arguments.get("file_id")
             save_path = arguments.get("save_path")
             return await handle_download_file(client, course_id, file_id, save_path)
+
+        elif name == "get_vod_info":
+            content_id = arguments.get("content_id")
+            return await handle_get_vod_info(client, content_id)
+
+        elif name == "get_daily_briefing":
+            return await handle_get_daily_briefing(client)
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -239,76 +227,44 @@ async def handle_list_announcements(client: CAUOnClient, course_id: str, limit: 
     output = f"# Course Announcements (Course ID: {course_id})\n\n"
     output += f"Total: {len(announcements)} announcements\n\n"
 
-    for ann in announcements:
-        title = ann.get('title', 'Untitled')
-        output += f"## {title}\n"
-
-        if ann.get('id'):
-            output += f"- **ID**: {ann['id']}\n"
-
-        if ann.get('posted_at'):
-            output += f"- **Posted**: {ann['posted_at']}\n"
-
-        if ann.get('author'):
-            # Handle author as dict or string
-            author = ann['author']
-            if isinstance(author, dict):
-                author_name = author.get('display_name', author.get('name', 'Unknown'))
-            else:
-                author_name = str(author)
-            output += f"- **Author**: {author_name}\n"
-
-        # Extract and show file attachments
-        html_message = ann.get('message', '')
-        if html_message:
-            from .cau_on_client import CAUOnClient
-            attachments = CAUOnClient.extract_attachments_from_html(html_message)
-            if attachments:
-                output += f"- **Attachments**: {len(attachments)} file(s)\n"
-                for att in attachments:
-                    filename = att.get('filename', 'Unknown')
-                    file_id = att.get('file_id', 'N/A')
-                    output += f"  - 📎 `{filename}` (file_id: {file_id})\n"
-
-        # Show full message content
-        if ann.get('message'):
-            message = ann['message'].strip()
-            # Remove HTML tags
-            import re
-            message = re.sub(r'<[^>]+>', '', message)
-            if message:
-                output += f"- **Content**: {message}\n"
-
-        output += "\n"
-
     return [TextContent(type="text", text=output)]
 
 
+async def handle_get_course_details(client: CAUOnClient, course_id: str, content_type: str) -> list[TextContent]:
+    """Handle get_course_details tool call by routing to specific content handlers"""
+    if content_type == "assignments":
+        return await handle_list_assignments(client, course_id)
+    elif content_type == "files":
+        return await handle_list_course_files(client, course_id)
+    else:  # default "weekly"
+        return await handle_get_weekly_view(client, course_id)
+
+
 async def handle_list_assignments(client: CAUOnClient, course_id: str) -> list[TextContent]:
-    """Handle list_assignments tool call"""
+    """Handle list_assignments logic (internal)"""
 
     # Check cache (2 min)
     cache_key = f"assignments_{course_id}"
     cached = get_cached(cache_key, max_age_seconds=120)
 
     if cached:
-        submissions = cached
+        assignments = cached
     else:
-        # Fetch assignment submissions via CAU-ON API
-        # Note: This endpoint returns submission status, not full assignment metadata
-        submissions = client.get_course_assignments(course_id)
+        # Fetch assignments via CAU-ON API (now includes submissions)
+        assignments = client.get_course_assignments(course_id)
 
-        if not submissions:
+        if not assignments:
             return [TextContent(type="text", text=f"No assignments found for course {course_id}")]
 
-        set_cached(cache_key, submissions)
+        set_cached(cache_key, assignments)
 
     # Format output
     output = f"# Assignments (Course ID: {course_id})\n\n"
-    output += f"Total: {len(submissions)} assignments\n\n"
+    output += f"Total: {len(assignments)} assignments\n\n"
 
-    for sub in submissions:
-        # Determine status emoji
+    for assign in assignments:
+        # Get submission info if available
+        sub = assign.get('submission', {})
         workflow_state = sub.get('workflow_state', 'unsubmitted')
 
         status_emoji = {
@@ -318,15 +274,21 @@ async def handle_list_assignments(client: CAUOnClient, course_id: str) -> list[T
             'unsubmitted': '❌'
         }.get(workflow_state, '❓')
 
-        # Use assignment_id as the title (since we don't have assignment name yet)
-        assignment_id = sub.get('assignment_id', 'Unknown')
-        output += f"## {status_emoji} Assignment ID: {assignment_id}\n"
+        # Use actual assignment name
+        name = assign.get('name', f"Assignment ID: {assign.get('id')}")
+        output += f"## {status_emoji} {name}\n"
 
-        output += f"- **Submission ID**: {sub.get('id')}\n"
+        output += f"- **Assignment ID**: {assign.get('id')}\n"
         output += f"- **Status**: {workflow_state}\n"
+        
+        if assign.get('due_at'):
+            output += f"- **Due At**: {assign['due_at']}\n"
+        
+        if assign.get('points_possible') is not None:
+            output += f"- **Points Possible**: {assign['points_possible']}\n"
 
         if sub.get('submitted_at'):
-            output += f"- **Submitted**: {sub['submitted_at']}\n"
+            output += f"- **Submitted At**: {sub['submitted_at']}\n"
 
         if sub.get('score') is not None:
             output += f"- **Score**: {sub['score']}\n"
@@ -345,112 +307,6 @@ async def handle_list_assignments(client: CAUOnClient, course_id: str) -> list[T
             output += f"- **Flags**: {', '.join(flags)}\n"
 
         output += "\n"
-
-    # Add note about limited metadata
-    output += "\n---\n"
-    output += "_Note: This shows submission status. For full assignment details (title, due date), "
-    output += "we may need to discover an additional API endpoint._\n"
-
-    return [TextContent(type="text", text=output)]
-
-
-async def handle_get_lecture_modules(client: CAUOnClient, course_id: str, include_attendance: bool) -> list[TextContent]:
-    """Handle get_lecture_modules tool call"""
-    import re
-
-    # Check cache (5 min)
-    cache_key = f"modules_{course_id}"
-    cached = get_cached(cache_key, max_age_seconds=300)
-
-    if cached:
-        modules = cached
-    else:
-        # Fetch modules via CAU-ON API
-        modules = client.get_modules(course_id)
-
-        if not modules:
-            return [TextContent(type="text", text=f"No modules found for course {course_id}")]
-
-        set_cached(cache_key, modules)
-
-    # Format output
-    output = f"# Weekly Lecture Modules (주차별 강의 목록)\n\n"
-    output += f"**Course ID**: {course_id}\n"
-    output += f"**Total Modules**: {len(modules)}\n\n"
-
-    for module in modules:
-        module_name = module.get('name', 'Unnamed Module')
-        output += f"## {module_name}\n"
-
-        if module.get('unlock_at'):
-            output += f"- **Unlock At**: {module['unlock_at']}\n"
-
-        items = module.get('items', [])
-        if not items:
-            output += "- _No items in this module_\n\n"
-            continue
-
-        output += f"- **Items**: {len(items)}\n\n"
-
-        for item in items:
-            title = item.get('title', 'Untitled')
-            item_type = item.get('type', 'Unknown')
-
-            output += f"### {title}\n"
-            output += f"- **Type**: {item_type}\n"
-            output += f"- **ID**: {item.get('id')}\n"
-
-            # Extract attendance item ID from external_url if available
-            attendance_id = None
-            external_url = item.get('external_url', '')
-            if 'lecture_attendance/items/view/' in external_url:
-                match = re.search(r'/lecture_attendance/items/view/(\d+)', external_url)
-                if match:
-                    attendance_id = match.group(1)
-
-            # Fetch detailed attendance info if requested
-            if include_attendance and attendance_id:
-                attendance_data = client.get_attendance_item(course_id, attendance_id)
-                if attendance_data:
-                    output += f"- **Week**: {attendance_data.get('week_position')}\n"
-                    output += f"- **Lesson**: {attendance_data.get('lesson_position')}\n"
-                    output += f"- **Status**: {attendance_data.get('lecture_period_status')}\n"
-
-                    # Show attendance/completion status
-                    att_info = attendance_data.get('attendance_data', {})
-                    if att_info:
-                        completed = att_info.get('completed', False)
-                        status_icon = "✅" if completed else "❌"
-                        output += f"- **Completion**: {status_icon} {att_info.get('attendance_status', 'N/A')}\n"
-
-                        if att_info.get('progress'):
-                            progress_sec = att_info['progress']
-                            duration_sec = attendance_data.get('item_content_data', {}).get('duration', progress_sec)
-                            progress_pct = (progress_sec / duration_sec * 100) if duration_sec > 0 else 0
-                            output += f"- **Progress**: {int(progress_pct)}% ({int(progress_sec/60)}m / {int(duration_sec/60)}m)\n"
-
-                    if attendance_data.get('unlock_at'):
-                        output += f"- **Unlock**: {attendance_data['unlock_at']}\n"
-                    if attendance_data.get('due_at'):
-                        output += f"- **Due**: {attendance_data['due_at']}\n"
-                    if attendance_data.get('lock_at'):
-                        output += f"- **Lock**: {attendance_data['lock_at']}\n"
-
-            # Show completion requirement if present
-            completion = item.get('completion_requirement')
-            if completion:
-                req_type = completion.get('type', 'unknown')
-                completed = completion.get('completed', False)
-                status = "✅" if completed else "❌"
-                output += f"- **Completion**: {status} ({req_type})\n"
-
-            output += "\n"
-
-        output += "\n"
-
-    if not include_attendance:
-        output += "\n---\n"
-        output += "_Tip: Use `include_attendance: true` to see detailed lecture status and due dates_\n"
 
     return [TextContent(type="text", text=output)]
 
@@ -493,6 +349,187 @@ async def handle_download_file(client: CAUOnClient, course_id: str, file_id: str
             return [TextContent(type="text", text=f"Download reported success but file not found at {save_path}")]
     else:
         return [TextContent(type="text", text=f"Failed to download file: {filename} (file_id={file_id})")]
+
+
+async def handle_list_course_files(client: CAUOnClient, course_id: str) -> list[TextContent]:
+    """Handle list_course_files tool call"""
+    # Check cache (5 min)
+    cache_key = f"files_{course_id}"
+    cached = get_cached(cache_key, max_age_seconds=300)
+
+    if cached:
+        files = cached
+    else:
+        files = client.get_course_files(course_id)
+        
+        if not files:
+            return [TextContent(type="text", text=f"No files found for course {course_id}")]
+
+        set_cached(cache_key, files)
+
+    output = f"# Course Files (자료실)\n\n"
+    output += f"**Course ID**: {course_id}\n"
+    output += f"**Total Files**: {len(files)}\n\n"
+
+    for f in files:
+        output += f"### {f.get('display_name', f.get('filename', 'Unknown'))}\n"
+        output += f"- **File ID**: {f.get('id')}\n"
+        output += f"- **Size**: {f.get('size', 0):,} bytes\n"
+        if f.get('created_at'):
+            output += f"- **Created At**: {f['created_at']}\n"
+        output += "\n"
+
+    return [TextContent(type="text", text=output)]
+
+
+async def handle_get_weekly_view(client: CAUOnClient, course_id: str) -> list[TextContent]:
+    """Handle get_weekly_view tool call"""
+    # Check cache (5 min)
+    cache_key = f"weekly_{course_id}"
+    cached = get_cached(cache_key, max_age_seconds=300)
+
+    if cached:
+        modules = cached
+    else:
+        modules = client.get_learningx_modules(course_id)
+        if not modules:
+            return [TextContent(type="text", text=f"No LearningX modules found for course {course_id}")]
+        set_cached(cache_key, modules)
+
+    output = f"# Weekly Study View (주차별 학습)\n\n"
+    output += f"**Course ID**: {course_id}\n\n"
+
+    for mod in modules:
+        output += f"## {mod.get('title', 'Unnamed Module')}\n"
+        items = mod.get('module_items', [])
+        
+        if not items:
+            output += "- _No items in this week_\n\n"
+            continue
+
+        for item in items:
+            title = item.get('title', 'Untitled')
+            item_type = item.get('type', 'Unknown')
+            output += f"### {title}\n"
+            output += f"- **Type**: {item_type}\n"
+            
+            # Show attendance/progress for video content
+            if item_type == 'lecture':
+                att = item.get('attendance_status', {})
+                status = "✅ Completed" if att.get('attendance_status') == 'attendance' else "❌ Unwatched"
+                output += f"- **Attendance**: {status}\n"
+                if att.get('progress'):
+                    output += f"- **Progress**: {att['progress']}%\n"
+                if item.get('content_id'):
+                    output += f"- **Content ID (for VOD info)**: {item['content_id']}\n"
+            
+            elif item_type == 'assignment':
+                sub = item.get('submission_status', {})
+                status = "✅ Submitted" if sub.get('workflow_state') in ['submitted', 'graded'] else "❌ Not Submitted"
+                output += f"- **Status**: {status}\n"
+                if item.get('due_at'):
+                    output += f"- **Due**: {item['due_at']}\n"
+            
+            output += "\n"
+
+    return [TextContent(type="text", text=output)]
+
+
+async def handle_get_vod_info(client: CAUOnClient, content_id: str) -> list[TextContent]:
+    """Handle get_vod_info tool call"""
+    info = client.get_ocs_content_info(content_id)
+    
+    if not info:
+        return [TextContent(type="text", text=f"Failed to fetch VOD info for content_id={content_id}")]
+
+    output = f"# VOD Content Information\n\n"
+    output += f"**Title**: {info.get('title', 'Unknown')}\n"
+    output += f"**Content ID**: {content_id}\n"
+    output += f"**Content Type**: {info.get('content_type', 'Unknown')}\n\n"
+
+    output += "## Streaming URLs (Media URIs)\n"
+    media_uris = info.get('media_uris', [])
+    if not media_uris:
+        output += "_No streaming links found._\n"
+    else:
+        for uri in media_uris:
+            output += f"### {uri.get('target', 'Default')} ({uri.get('method', 'N/A')})\n"
+            output += f"- **URL**: {uri.get('url')}\n\n"
+
+    return [TextContent(type="text", text=output)]
+
+
+async def handle_get_daily_briefing(client: CAUOnClient) -> list[TextContent]:
+    """Handle get_daily_briefing tool call"""
+    # Fetch data from multiple endpoints
+    todo_items = client.get_todo_items()
+    conversations = client.get_conversations(limit=5)
+    activity_stream = client.get_activity_stream()
+
+    output = "# 📅 Daily Briefing (중앙대 e-class 요약)\n\n"
+
+    # 1. Deadlines (Todo)
+    output += "## 🚨 마감 임박 (Upcoming Deadlines)\n"
+    if not todo_items:
+        output += "_현재 예정된 할 일이 없습니다._\n"
+    else:
+        for item in todo_items[:10]:  # Show top 10
+            course_name = item.get('context_name', 'Unknown Course')
+            title = item.get('title', 'Untitled')
+            due_at = item.get('assignment', {}).get('due_at') or item.get('quiz', {}).get('due_at')
+            
+            status = ""
+            if item.get('needs_grading_count'):
+                status = " (채점 대기 중)"
+            
+            output += f"- **[{course_name}]** {title}\n"
+            if due_at:
+                output += f"  - 마감: {client._convert_utc_to_kst(due_at)}\n"
+    output += "\n"
+
+    # 2. Messages (Inbox)
+    output += "## 📩 새로운 쪽지 (Recent Messages)\n"
+    unread_messages = [c for c in conversations if c.get('workflow_state') == 'unread']
+    display_messages = unread_messages if unread_messages else conversations[:3]
+    
+    if not display_messages:
+        output += "_최근 받은 쪽지가 없습니다._\n"
+    else:
+        for conv in display_messages:
+            author = conv.get('participants', [{}])[0].get('name', 'Unknown')
+            subject = conv.get('subject', 'No Subject')
+            last_msg = conv.get('last_message', '...')
+            unread_tag = "🔴 [미읽음] " if conv.get('workflow_state') == 'unread' else ""
+            
+            output += f"- {unread_tag}**{author}**: {subject}\n"
+            output += f"  - _{last_msg[:50]}..._\n"
+    output += "\n"
+
+    # 3. Activity Stream
+    output += "## 🆕 최근 업데이트 (Activity Stream)\n"
+    if not activity_stream:
+        output += "_최근 업데이트 소식이 없습니다._\n"
+    else:
+        # Categorize by type
+        for activity in activity_stream[:7]:
+            act_type = activity.get('type', 'Message')
+            title = activity.get('title', 'Notification')
+            course = activity.get('course_name', '')
+            
+            emoji = {
+                'Announcement': '📢',
+                'Conversation': '✉️',
+                'Assignment': '📝',
+                'Submission': '📤',
+                'GradeChange': '📊'
+            }.get(act_type, '🔔')
+            
+            output += f"- {emoji} **{title}**"
+            if course:
+                output += f" ({course})"
+            output += "\n"
+
+    return [TextContent(type="text", text=output)]
 
 
 async def main():
