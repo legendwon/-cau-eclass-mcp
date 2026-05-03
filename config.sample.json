@@ -1,0 +1,9 @@
+{
+  "download_dir": "/path/to/your/obsidian/1학기",
+  "course_map": {
+    "123456": "01_CourseA",
+    "123457": "02_CourseB",
+    "123458": "03_CourseC",
+    "123459": "04_CourseD"
+  }
+}

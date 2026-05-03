@@ -6,10 +6,18 @@ Updated with discovered endpoints from 04_CAU_ON_API_Discovery_0307.md (2026-03-
 Fixed with exact browser request matching (2026-03-08)
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timezone, timedelta
+import json
+from pathlib import Path
 import requests
 import httpx
+
+
+# Default mapping if config.json is missing (Empty by default for security/generic use)
+DEFAULT_COURSE_FOLDER_MAP = {
+    # "course_id": "Johnny_Decimal_Folder_Name"
+}
 
 
 class CAUOnClient:
@@ -25,6 +33,9 @@ class CAUOnClient:
         self.session = auth_session
         self.base_url = 'https://eclass3.cau.ac.kr'
         self._session_initialized = False
+        
+        # Load configuration from config.json
+        self.config = self._load_config()
 
         # Create httpx client for HTTP/2 support
         # Note: cookies will be updated from session on each request
@@ -33,6 +44,30 @@ class CAUOnClient:
             timeout=30.0,
             follow_redirects=True
         )
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from config.json in the project root"""
+        # Try to find config.json in project root
+        # Path relative to this file: src/cau_eclass_mcp/cau_on_client.py -> 프로젝트 루트
+        locations = [
+            Path.cwd() / 'config.json',
+            Path(__file__).parent.parent.parent / 'config.json',
+        ]
+        
+        for loc in locations:
+            if loc.exists():
+                try:
+                    with open(loc, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except Exception as e:
+                    print(f"Warning: Failed to load config from {loc}: {e}")
+        
+        return {}
+
+    def _get_course_folder_name(self, course_id: str) -> str:
+        """Get the folder name for a course from config or default mapping"""
+        course_map = self.config.get('course_map', DEFAULT_COURSE_FOLDER_MAP)
+        return course_map.get(str(course_id), f"99_Unknown_Course_{course_id}")
 
     def close(self):
         """Close HTTP/2 client and release resources"""
@@ -590,8 +625,49 @@ class CAUOnClient:
             print(f"Error fetching file info: {e}")
             return None
 
-    @staticmethod
-    def _validate_save_path(save_path: str) -> str:
+    def _get_auto_save_path(self, course_id: str, filename: str) -> str:
+        """
+        Generate save path strictly following Obsidian Johnny Decimal rules.
+        Path: {base_dir}/{NN_course_name}/90_자료/{XX_filename}
+        """
+        import os
+        import re
+        from pathlib import Path
+
+        # Try environment variable, then config.json, then default path
+        base_dir = os.environ.get('CAU_ECLASS_DOWNLOAD_DIR')
+        if not base_dir:
+            base_dir = self.config.get('download_dir')
+
+        if base_dir:
+            base = Path(base_dir)
+        else:
+            base = Path.home() / 'Downloads' / 'eclass'
+
+        folder_name = self._get_course_folder_name(course_id)
+        target_dir = base / folder_name / '90_자료'
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Auto-numbering logic: Find the highest existing prefix (e.g., 01_, 02_)
+        max_num = 0
+        pattern = re.compile(r'^(\d+)_')
+        try:
+            for f in target_dir.iterdir():
+                if f.is_file():
+                    match = pattern.match(f.name)
+                    if match:
+                        num = int(match.group(1))
+                        if num > max_num:
+                            max_num = num
+        except FileNotFoundError:
+            pass
+        
+        next_num = max_num + 1
+        new_filename = f"{next_num:02d}_{filename}"
+        
+        return str(target_dir / new_filename)
+
+    def _validate_save_path(self, save_path: str) -> str:
         """
         Validate and sanitize file save path to prevent path traversal.
 
@@ -620,8 +696,8 @@ class CAUOnClient:
             Path(os.environ.get('TMP', '')),
         ]
 
-        # Add custom download directory if configured
-        custom_dir = os.environ.get('CAU_ECLASS_DOWNLOAD_DIR')
+        # Add custom download directory if configured via env var or config.json
+        custom_dir = os.environ.get('CAU_ECLASS_DOWNLOAD_DIR') or self.config.get('download_dir')
         if custom_dir:
             allowed_bases.append(Path(custom_dir))
 
@@ -634,24 +710,30 @@ class CAUOnClient:
                 continue
 
         raise ValueError(
-            f"Save path must be under ~/Downloads, ~/Documents, ~/Desktop, temp directory, or CAU_ECLASS_DOWNLOAD_DIR. "
+            f"Save path must be under ~/Downloads, ~/Documents, ~/Desktop, configured path, or CAU_ECLASS_DOWNLOAD_DIR. "
             f"Got: {resolved}"
         )
 
-    def download_file(self, course_id: str, file_id: str, save_path: str) -> bool:
+    def download_file(self, course_id: str, file_id: str, save_path: str = None, filename: str = None) -> bool:
         """
         Download a file from e-class
 
         Args:
             course_id: Course ID
             file_id: File ID
-            save_path: Local path to save the file (must be under ~/Downloads, ~/Documents, ~/Desktop, or temp)
+            save_path: Local path to save the file (optional, auto-routed if None)
+            filename: Filename hint for auto-routing
 
         Returns:
             True if download successful, False otherwise
 
         Endpoint: GET /courses/{course_id}/files/{file_id}/download
         """
+        # Auto-routing if save_path is not provided
+        if save_path is None:
+            fname = filename or file_id
+            save_path = self._get_auto_save_path(course_id, fname)
+
         # Validate save path to prevent path traversal
         try:
             save_path = self._validate_save_path(save_path)

@@ -78,7 +78,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="download_file",
-            description="Download a file from e-class announcements or course materials",
+            description="Download a file from e-class. Automatically routes to Obsidian vault (90_자료 folder with auto-numbering) if save_path is omitted.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -92,10 +92,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "save_path": {
                         "type": "string",
-                        "description": "Local file path to save (e.g., './downloads/lecture.pdf')"
+                        "description": "Optional local file path to save override. If omitted, saves to Obsidian vault automatically."
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": "Filename hint (e.g., 'week1.pdf') for auto-routing."
                     }
                 },
-                "required": ["course_id", "file_id", "save_path"]
+                "required": ["course_id", "file_id"]
             }
         ),
         Tool(
@@ -143,7 +147,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             course_id = arguments.get("course_id")
             file_id = arguments.get("file_id")
             save_path = arguments.get("save_path")
-            return await handle_download_file(client, course_id, file_id, save_path)
+            filename = arguments.get("filename")
+            return await handle_download_file(client, course_id, file_id, save_path, filename)
 
         elif name == "get_vod_info":
             content_id = arguments.get("content_id")
@@ -311,7 +316,7 @@ async def handle_list_assignments(client: CAUOnClient, course_id: str) -> list[T
     return [TextContent(type="text", text=output)]
 
 
-async def handle_download_file(client: CAUOnClient, course_id: str, file_id: str, save_path: str) -> list[TextContent]:
+async def handle_download_file(client: CAUOnClient, course_id: str, file_id: str, save_path: str = None, filename_hint: str = None) -> list[TextContent]:
     """Handle download_file tool call"""
     import os
 
@@ -321,32 +326,39 @@ async def handle_download_file(client: CAUOnClient, course_id: str, file_id: str
     if not file_info:
         return [TextContent(type="text", text=f"Failed to get file info for file_id={file_id}")]
 
-    filename = file_info.get('display_name', file_info.get('filename', 'unknown'))
+    filename = file_info.get('display_name', file_info.get('filename', filename_hint or 'unknown'))
     filesize = file_info.get('size', 0)
 
+    # If save_path is None, the client will auto-calculate it.
+    # We need to know what it will be for the final report.
+    actual_save_path = save_path
+    if actual_save_path is None:
+        actual_save_path = client._get_auto_save_path(course_id, filename)
+
     # Download file
-    success = client.download_file(course_id, file_id, save_path)
+    success = client.download_file(course_id, file_id, save_path, filename)
 
     if success:
         # Verify file was saved
-        if os.path.exists(save_path):
-            actual_size = os.path.getsize(save_path)
+        if os.path.exists(actual_save_path):
+            actual_size = os.path.getsize(actual_save_path)
             output = f"# File Download Successful\n\n"
             output += f"- **Filename**: {filename}\n"
             output += f"- **File ID**: {file_id}\n"
             output += f"- **Course ID**: {course_id}\n"
             output += f"- **Expected Size**: {filesize:,} bytes\n"
             output += f"- **Downloaded Size**: {actual_size:,} bytes\n"
-            output += f"- **Saved to**: `{save_path}`\n"
+            output += f"- **Saved to**: `{actual_save_path}`\n"
 
             if actual_size == filesize:
                 output += f"\n✅ **File size matches - download verified**"
             else:
-                output += f"\n⚠️ **Warning: File size mismatch**"
+                # In some cases size might differ slightly due to transfer encoding, but usually matches
+                output += f"\n⚠️ **Note: File size differs (Expected: {filesize}, Actual: {actual_size})**"
 
             return [TextContent(type="text", text=output)]
         else:
-            return [TextContent(type="text", text=f"Download reported success but file not found at {save_path}")]
+            return [TextContent(type="text", text=f"Download reported success but file not found at {actual_save_path}")]
     else:
         return [TextContent(type="text", text=f"Failed to download file: {filename} (file_id={file_id})")]
 

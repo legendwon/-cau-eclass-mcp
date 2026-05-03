@@ -37,15 +37,19 @@ venv.bak/
 *.swo
 *~
 
-# Claude Code local settings
+# Claude Code and Gemini local settings
 .claude/
+.gemini/
 
 # Private development notes (not for GitHub)
 CLAUDE/
+plan.md
+progress.md
 
 # Credentials and secrets
 .credentials.json
 credentials.json
+config.json
 *.session
 .env
 .env.local
